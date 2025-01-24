@@ -1,27 +1,19 @@
 apiVersion: v1
 appVersion: "1.0.28"
 version: 1.0.28
-description: A Helm chart for cert manager webhook solver for ACME DNS01 challenge via Netcup
-name: cert-manager-webhook-netcup
-home: https://github.com/aellwein/cert-manager-webhook-netcup
+description: A Helm chart for cert manager webhook solver for ACME DNS01 challenge via Bunny
+name: cert-manager-webhook-bunny
+home: https://github.com/davidhidvegi/cert-manager-webhook-bunny
 icon: https://raw.githubusercontent.com/cert-manager/cert-manager/master/logo/logo.png
 keywords:
   - cert-manager
   - webhook
   - letsencrypt
-  - netcup
+  - bunny
   - ACME
   - DNS01
 annotations:
   artifacthub.io/license: Apache-2.0
   artifacthub.io/maintainers: |
-    - name: Alex Ellwein
-      email: alex.ellwein@gmail.com
-  artifacthub.io/containsSecurityUpdates: "true"
-  # kinds: added, changed, deprecated, removed, fixed, security.
-  artifacthub.io/changes: |
-    - kind: security
-      description: "bump golang.org/x/net to mitigate CVE-2024-45338"
-  artifacthub.io/signKey: |
-    fingerprint: "F91914CE96676E209A8240290EEF2777053A7D1A"
-    url: https://keybase.io/aellwein/pgp_keys.asc
+    - name: David Hidvegi
+      email: david@hidvegi.xyz

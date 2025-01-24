@@ -14,7 +14,7 @@
 .vscode/
 
 # Ignore the built binary
-/cert-manager-webhook-netcup
+/cert-manager-webhook-bunny
 
 # Make artifacts
 _out

@@ -1,9 +1,9 @@
-cert-manager-webhook-netcup
+cert-manager-webhook-bunny
 ===========================
 
-Helm chart for installation of cert-manager's webhook for solving DNS challenges using Netcup DNS API.
+Helm chart for installation of cert-manager's webhook for solving DNS challenges using Bunny DNS API.
 
-See this [README.md](https://github.com/aellwein/cert-manager-webhook-netcup/blob/main/README.md)
+See this [README.md](https://github.com/davidhidvegi/cert-manager-webhook-bunny/blob/main/README.md)
 for configuration and more details.
 
 Release

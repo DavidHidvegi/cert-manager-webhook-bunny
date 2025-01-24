@@ -9,4 +9,4 @@ test:
 	go test ./...
 
 clean:
-	$(RM) cert-manager-webhook-netcup
+	$(RM) cert-manager-webhook-bunny

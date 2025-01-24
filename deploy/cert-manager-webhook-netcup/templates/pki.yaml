@@ -4,11 +4,11 @@
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
-  name: {{ include "cert-manager-webhook-netcup.selfSignedIssuer" . }}
+  name: {{ include "cert-manager-webhook-bunny.selfSignedIssuer" . }}
   namespace: {{ .Release.Namespace | quote }}
   labels:
-    app: {{ include "cert-manager-webhook-netcup.name" . }}
-    chart: {{ include "cert-manager-webhook-netcup.chart" . }}
+    app: {{ include "cert-manager-webhook-bunny.name" . }}
+    chart: {{ include "cert-manager-webhook-bunny.chart" . }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
@@ -20,19 +20,19 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: {{ include "cert-manager-webhook-netcup.rootCACertificate" . }}
+  name: {{ include "cert-manager-webhook-bunny.rootCACertificate" . }}
   namespace: {{ .Release.Namespace | quote }}
   labels:
-    app: {{ include "cert-manager-webhook-netcup.name" . }}
-    chart: {{ include "cert-manager-webhook-netcup.chart" . }}
+    app: {{ include "cert-manager-webhook-bunny.name" . }}
+    chart: {{ include "cert-manager-webhook-bunny.chart" . }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
-  secretName: {{ include "cert-manager-webhook-netcup.rootCACertificate" . }}
+  secretName: {{ include "cert-manager-webhook-bunny.rootCACertificate" . }}
   duration: 43800h # 5y
   issuerRef:
-    name: {{ include "cert-manager-webhook-netcup.selfSignedIssuer" . }}
-  commonName: "ca.cert-manager-webhook-netcup.cert-manager"
+    name: {{ include "cert-manager-webhook-bunny.selfSignedIssuer" . }}
+  commonName: "ca.cert-manager-webhook-bunny.cert-manager"
   isCA: true
 
 ---
@@ -41,16 +41,16 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
-  name: {{ include "cert-manager-webhook-netcup.rootCAIssuer" . }}
+  name: {{ include "cert-manager-webhook-bunny.rootCAIssuer" . }}
   namespace: {{ .Release.Namespace | quote }}
   labels:
-    app: {{ include "cert-manager-webhook-netcup.name" . }}
-    chart: {{ include "cert-manager-webhook-netcup.chart" . }}
+    app: {{ include "cert-manager-webhook-bunny.name" . }}
+    chart: {{ include "cert-manager-webhook-bunny.chart" . }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
   ca:
-    secretName: {{ include "cert-manager-webhook-netcup.rootCACertificate" . }}
+    secretName: {{ include "cert-manager-webhook-bunny.rootCACertificate" . }}
 
 ---
 
@@ -58,19 +58,19 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: {{ include "cert-manager-webhook-netcup.servingCertificate" . }}
+  name: {{ include "cert-manager-webhook-bunny.servingCertificate" . }}
   namespace: {{ .Release.Namespace | quote }}
   labels:
-    app: {{ include "cert-manager-webhook-netcup.name" . }}
-    chart: {{ include "cert-manager-webhook-netcup.chart" . }}
+    app: {{ include "cert-manager-webhook-bunny.name" . }}
+    chart: {{ include "cert-manager-webhook-bunny.chart" . }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
-  secretName: {{ include "cert-manager-webhook-netcup.servingCertificate" . }}
+  secretName: {{ include "cert-manager-webhook-bunny.servingCertificate" . }}
   duration: 8760h # 1y
   issuerRef:
-    name: {{ include "cert-manager-webhook-netcup.rootCAIssuer" . }}
+    name: {{ include "cert-manager-webhook-bunny.rootCAIssuer" . }}
   dnsNames:
-  - {{ include "cert-manager-webhook-netcup.fullname" . }}
-  - {{ include "cert-manager-webhook-netcup.fullname" . }}.{{ .Release.Namespace }}
-  - {{ include "cert-manager-webhook-netcup.fullname" . }}.{{ .Release.Namespace }}.svc
+  - {{ include "cert-manager-webhook-bunny.fullname" . }}
+  - {{ include "cert-manager-webhook-bunny.fullname" . }}.{{ .Release.Namespace }}
+  - {{ include "cert-manager-webhook-bunny.fullname" . }}.{{ .Release.Namespace }}.svc

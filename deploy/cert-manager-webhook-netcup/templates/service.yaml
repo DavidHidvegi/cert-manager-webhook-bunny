@@ -1,10 +1,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "cert-manager-webhook-netcup.fullname" . }}
+  name: {{ include "cert-manager-webhook-bunny.fullname" . }}
   labels:
-    app: {{ include "cert-manager-webhook-netcup.name" . }}
-    chart: {{ include "cert-manager-webhook-netcup.chart" . }}
+    app: {{ include "cert-manager-webhook-bunny.name" . }}
+    chart: {{ include "cert-manager-webhook-bunny.chart" . }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
@@ -15,5 +15,5 @@ spec:
       protocol: TCP
       name: https
   selector:
-    app: {{ include "cert-manager-webhook-netcup.name" . }}
+    app: {{ include "cert-manager-webhook-bunny.name" . }}
     release: {{ .Release.Name }}

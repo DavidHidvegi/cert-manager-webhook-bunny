@@ -1,28 +1,28 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "cert-manager-webhook-netcup.fullname" . }}
+  name: {{ include "cert-manager-webhook-bunny.fullname" . }}
   labels:
-    app: {{ include "cert-manager-webhook-netcup.name" . }}
-    chart: {{ include "cert-manager-webhook-netcup.chart" . }}
+    app: {{ include "cert-manager-webhook-bunny.name" . }}
+    chart: {{ include "cert-manager-webhook-bunny.chart" . }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      app: {{ include "cert-manager-webhook-netcup.name" . }}
+      app: {{ include "cert-manager-webhook-bunny.name" . }}
       release: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ include "cert-manager-webhook-netcup.name" . }}
+        app: {{ include "cert-manager-webhook-bunny.name" . }}
         release: {{ .Release.Name }}
     spec:
-      serviceAccountName: {{ include "cert-manager-webhook-netcup.fullname" . }}
+      serviceAccountName: {{ include "cert-manager-webhook-bunny.fullname" . }}
       containers:
         - name: {{ .Chart.Name }}
-          image: {{ include "cert-manager-webhook-netcup.fullImageName" . }}
+          image: {{ include "cert-manager-webhook-bunny.fullImageName" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - --tls-cert-file=/tls/tls.crt
@@ -53,7 +53,7 @@ spec:
       volumes:
         - name: certs
           secret:
-            secretName: {{ include "cert-manager-webhook-netcup.servingCertificate" . }}
+            secretName: {{ include "cert-manager-webhook-bunny.servingCertificate" . }}
     {{- with .Values.nodeSelector }}
       nodeSelector:
 {{ toYaml . | indent 8 }}
