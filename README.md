@@ -7,7 +7,7 @@ cert-manager-webhook-bunny
 ===========================
 
 [cert-manager](https://cert-manager.io) webhook implementation for use
-with [Bunny](https://bunny.net) provider for solving [ACME DNS-01
+with [Bunny](https://bunny.net) (bunny.net) provider for solving [ACME DNS-01
 challenges](https://cert-manager.io/docs/configuration/acme/dns01/).
 
 Usage
