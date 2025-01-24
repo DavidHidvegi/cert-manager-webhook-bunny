@@ -3,21 +3,24 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 
-	netcup "github.com/aellwein/netcup-dns-api/pkg/v1"
 	extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 
 	"github.com/cert-manager/cert-manager/pkg/acme/webhook/apis/acme/v1alpha1"
 	"github.com/cert-manager/cert-manager/pkg/acme/webhook/cmd"
+	"github.com/davidhidvegi/cert-manager-webhook-bunny/internal"
 )
 
 var GroupName = os.Getenv("GROUP_NAME")
@@ -28,58 +31,56 @@ func main() {
 	}
 
 	cmd.RunWebhookServer(GroupName,
-		&netcupDNSProviderSolver{},
+		&bunnyDNSProviderSolver{},
 	)
 }
 
-// These are the things required to interact with Netcup API, should be located
+// These are the things required to interact with Bunny API, should be located
 // in secret, referenced in config by it's name
-type netcupClientConfig struct {
-	customerNumber int
-	apiKey         string
-	apiPassword    string
+type bunnyClientConfig struct {
+	apiKey string
 }
 
-type netcupDNSProviderSolver struct {
+type bunnyDNSProviderSolver struct {
 	client *kubernetes.Clientset
 }
 
-type netcupDNSProviderConfig struct {
-	// name of the secret which contains Netcup credentials
+type bunnyDNSProviderConfig struct {
+	// name of the secret which contains Bunny credentials
 	SecretRef string `json:"secretRef"`
 	// optional namespace for the secret
 	SecretNamespace string `json:"secretNamespace"`
 }
 
-func (n *netcupDNSProviderSolver) Name() string {
-	return "netcup"
+func (n *bunnyDNSProviderSolver) Name() string {
+	return "bunny"
 }
 
-func (n *netcupDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) error {
+func (n *bunnyDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) error {
 	cfg, err := n.getConfig(ch)
 	if err != nil {
 		return err
 	}
-	if err := addOrDeleteTxtRecord(cfg, ch.ResolvedFQDN, ch.Key, false); err != nil {
+	if err := addTxtRecord(cfg, ch.ResolvedFQDN, ch.Key); err != nil {
 		return err
 	}
 	klog.Infof("successfully presented challenge for domain '%s'", ch.DNSName)
 	return nil
 }
 
-func (n *netcupDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) error {
+func (n *bunnyDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) error {
 	cfg, err := n.getConfig(ch)
 	if err != nil {
 		return err
 	}
-	if err := addOrDeleteTxtRecord(cfg, ch.ResolvedFQDN, ch.Key, true); err != nil {
+	if err := deleteTxtRecord(cfg, ch.ResolvedFQDN, ch.Key); err != nil {
 		return err
 	}
 	klog.Infof("successfully cleaned up challenge for domain '%s'", ch.DNSName)
 	return nil
 }
 
-func (n *netcupDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, stopCh <-chan struct{}) error {
+func (n *bunnyDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, stopCh <-chan struct{}) error {
 	cl, err := kubernetes.NewForConfig(kubeClientConfig)
 	if err != nil {
 		return err
@@ -88,14 +89,14 @@ func (n *netcupDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, stop
 	return nil
 }
 
-func (n *netcupDNSProviderSolver) getConfig(ch *v1alpha1.ChallengeRequest) (*netcupClientConfig, error) {
+func (n *bunnyDNSProviderSolver) getConfig(ch *v1alpha1.ChallengeRequest) (*bunnyClientConfig, error) {
 	var secretNs string
 	cfg, err := loadConfig(ch.Config)
 	if err != nil {
 		return nil, err
 	}
 
-	netcupCfg := &netcupClientConfig{}
+	bunnyCfg := &bunnyClientConfig{}
 
 	if cfg.SecretNamespace != "" {
 		secretNs = cfg.SecretNamespace
@@ -108,92 +109,119 @@ func (n *netcupDNSProviderSolver) getConfig(ch *v1alpha1.ChallengeRequest) (*net
 		return nil, fmt.Errorf("unable to get secret '%s/%s': %v", secretNs, cfg.SecretRef, err)
 	}
 
-	customerNumber, err := stringFromSecretData(&sec.Data, "customer-number")
-	if err != nil {
-		return nil, fmt.Errorf("unable to get 'customer-number' from secret '%s/%s': %v", secretNs, cfg.SecretRef, err)
-	}
-	netcupCfg.customerNumber, err = strconv.Atoi(customerNumber)
-	if err != nil {
-		return nil, fmt.Errorf("expected 'customer-number' to be a numeric int value, got '%s'", customerNumber)
-	}
-	netcupCfg.apiKey, err = stringFromSecretData(&sec.Data, "api-key")
+	bunnyCfg.apiKey, err = stringFromSecretData(&sec.Data, "api-key")
 	if err != nil {
 		return nil, fmt.Errorf("unable to get 'api-key' from secret '%s/%s': %v", secretNs, cfg.SecretRef, err)
 	}
-	netcupCfg.apiPassword, err = stringFromSecretData(&sec.Data, "api-password")
-	if err != nil {
-		return nil, fmt.Errorf("unable to get 'api-password' from secret '%s/%s': %v", secretNs, cfg.SecretRef, err)
-	}
 
-	return netcupCfg, nil
+	return bunnyCfg, nil
 }
 
-func addOrDeleteTxtRecord(cfg *netcupClientConfig, resolvedFqdn string, key string, delete bool) error {
-	netcupClient := netcup.NewNetcupDnsClient(cfg.customerNumber, cfg.apiKey, cfg.apiPassword)
-	sess, err := netcupClient.Login()
-	if err != nil {
-		return fmt.Errorf("unable to login to netcup API: %v", err)
+func addTxtRecord(cfg *bunnyClientConfig, resolvedFqdn string, key string) error {
+	zones, host, getErr := getZonesAndHost(resolvedFqdn, cfg)
+	if getErr != nil {
+		return getErr
 	}
-	defer sess.Logout()
 
-	rePattern := regexp.MustCompile(`^(.+)\.(([^\.]+)\.([^\.]+))\.$`)
-	match := rePattern.FindStringSubmatch(resolvedFqdn)
-	if match == nil {
-		return fmt.Errorf("unable to parse host/domain out of resolved FQDN ('%s')", resolvedFqdn)
-	}
-	host := match[1]
-	domain := match[2]
+	// Create a new TXT record
+	zoneId := zones.Items[0].Id
+	zoneIdStr := fmt.Sprintf("%d", zoneId)
+	urlOfRecords := "https://api.bunny.net/dnszone/" + zoneIdStr + "/records"
 
-	recs, err := sess.InfoDnsRecords(domain)
-	if err != nil {
-		if sess.LastResponse != nil &&
-			sess.LastResponse.Status == string(netcup.StatusError) &&
-			sess.LastResponse.StatusCode == 5029 {
-			// See https://github.com/aellwein/cert-manager-webhook-netcup/issues/41
-			// Netcup API returns an error here, but for us it is actually a warning in case no DNS records are found for the domain.
-			// The resulting records will be an empty DnsRecord array, so we just proceed here.
-		} else {
-			return fmt.Errorf("unable to get DNS records for domain '%s': %v", resolvedFqdn, err)
-		}
+	payload := strings.NewReader("{\"Type\":3,\"Ttl\":120,\"Value\":\"" + key + "\",\"Name\":\"" + host + "\"}")
+
+	putResBody, putResErr := callDnsApi(urlOfRecords, "PUT", payload, cfg)
+	if putResErr != nil {
+		return fmt.Errorf("Failed to create record: %v", putResErr)
 	}
-	var foundRec *netcup.DnsRecord
-	for _, rec := range *recs {
-		// record already exists?
-		if strings.HasPrefix(host, rec.Hostname) && rec.Type == "TXT" {
-			foundRec = &rec
+
+	record := internal.Record{}
+	recordReadErr := json.Unmarshal(putResBody, &record)
+	if recordReadErr != nil {
+		return fmt.Errorf("Unable to unmarshal response: %v", recordReadErr)
+	}
+	return nil
+}
+
+func deleteTxtRecord(cfg *bunnyClientConfig, resolvedFqdn string, key string) error {
+	zones, host, getErr := getZonesAndHost(resolvedFqdn, cfg)
+	if getErr != nil {
+		return getErr
+	}
+
+	// Find the TXT record and delete it
+	for _, record := range zones.Items[0].Records {
+		if record.Value == key && record.Type == 3 && record.Name == host { // Type 3 is TXT record
+			// Delete the record
+			urlOfRecords := "https://api.bunny.net/dnszone/" + fmt.Sprintf("%d", zones.Items[0].Id) + "/records/" + fmt.Sprintf("%d", record.Id)
+			_, deleteResErr := callDnsApi(urlOfRecords, "DELETE", nil, cfg)
+			if deleteResErr != nil {
+				return fmt.Errorf("Failed to delete record: %v", deleteResErr)
+			}
 			break
 		}
 	}
-	if foundRec != nil {
-		if !delete {
-			if foundRec.Destination == key {
-				// record already contains the challenge, nothing to do
-				return nil
-			}
-			foundRec.Destination = key
-			foundRec.DeleteRecord = false
-		} else {
-			foundRec.DeleteRecord = true
-		}
-	} else {
-		if delete {
-			// record is already gone -> nothing to do
-			return nil
-		}
-		foundRec = &netcup.DnsRecord{
-			Id:           "",
-			Hostname:     host,
-			Type:         "TXT",
-			Priority:     "",
-			Destination:  key,
-			DeleteRecord: false,
-			State:        "yes",
-		}
-	}
-	if _, err := sess.UpdateDnsRecords(domain, &[]netcup.DnsRecord{*foundRec}); err != nil {
-		return fmt.Errorf("failed to set TXT record for domain '%s': %v, record to set: %v", resolvedFqdn, err, foundRec)
-	}
 	return nil
+}
+
+func getZonesAndHost(resolvedFqdn string, cfg *bunnyClientConfig) (internal.ZoneResponse, string, error) {
+	rePattern := regexp.MustCompile(`^(.+)\.(([^\.]+)\.([^\.]+))\.$`)
+	match := rePattern.FindStringSubmatch(resolvedFqdn)
+	if match == nil {
+		return internal.ZoneResponse{}, "", fmt.Errorf("unable to parse host/domain out of resolved FQDN ('%s')", resolvedFqdn)
+	}
+	host := match[1]   // something like "_acme-challenge"
+	domain := match[2] // something like "example.com"
+
+	urlOfDnsZones := "https://api.bunny.net/dnszone?page=1&perPage=1000&search=" + domain
+
+	getResBody, getResErr := callDnsApi(urlOfDnsZones, "GET", nil, cfg)
+	if getResErr != nil {
+		return internal.ZoneResponse{}, "", fmt.Errorf("Failed to request zones: %v", getResErr)
+	}
+
+	zones := internal.ZoneResponse{}
+	zonesReadErr := json.Unmarshal(getResBody, &zones)
+	if zonesReadErr != nil {
+		return internal.ZoneResponse{}, "", fmt.Errorf("Unable to unmarshal response: %v", zonesReadErr)
+	}
+	if zones.TotalItems != 1 {
+		return internal.ZoneResponse{}, "", fmt.Errorf("wrong number of zones in response %d must be exactly = 1", zones.TotalItems)
+	}
+	return zones, host, nil
+}
+
+func callDnsApi(url, method string, body io.Reader, cfg *bunnyClientConfig) ([]byte, error) {
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return []byte{}, fmt.Errorf("unable to execute request %v", err)
+	}
+	req.Header.Add("content-type", "application/json")
+	req.Header.Set("accept", "application/json")
+	req.Header.Set("AccessKey", cfg.apiKey)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			klog.Fatal(err)
+		}
+	}()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusNoContent {
+		return respBody, nil
+	}
+
+	text := "Error calling API status:" + resp.Status + " url: " + url + " method: " + method
+	klog.Error(text)
+	return nil, errors.New(text)
 }
 
 func stringFromSecretData(secretData *map[string][]byte, key string) (string, error) {
@@ -204,8 +232,8 @@ func stringFromSecretData(secretData *map[string][]byte, key string) (string, er
 	return string(data), nil
 }
 
-func loadConfig(cfgJSON *extapi.JSON) (netcupDNSProviderConfig, error) {
-	cfg := netcupDNSProviderConfig{}
+func loadConfig(cfgJSON *extapi.JSON) (bunnyDNSProviderConfig, error) {
+	cfg := bunnyDNSProviderConfig{}
 
 	if cfgJSON == nil {
 		return cfg, nil
